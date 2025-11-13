@@ -1,50 +1,89 @@
+# .github/workflows/text-to-video.yml
+name: Text-to-Video Generation
 
-import torch
-from diffusers import DiffusionPipeline
-from diffusers.utils import export_to_video
-from IPython.display import Video, display
-import gc
+on:
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      prompt:
+        description: 'Text prompt for video generation'
+        required: true
+        default: 'A cute teddy bear waving hello'
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight
 
-print("🚀 Loading text-to-video model on CPU...")
-
-# Use CPU
-device = "cpu"
-torch_dtype = torch.float32  # Use float32 for CPU
-
-try:
-    pipe = DiffusionPipeline.from_pretrained(
-        "damo-vilab/text-to-video-ms-1.7b",
-        torch_dtype=torch_dtype,
-    )
-    pipe = pipe.to(device)
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
     
-    print("✅ Model loaded successfully on CPU!")
-    
-except Exception as e:
-    print(f"❌ Error loading model: {e}")
-    # Try without dtype specification
-    pipe = DiffusionPipeline.from_pretrained("damo-vilab/text-to-video-ms-1.7b")
-    pipe = pipe.to(device)
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-# Generate video with CPU-friendly settings
-prompt = "A cute teddy bear waving hello"
-print(f"🎬 Generating video: {prompt}")
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
-# Use fewer steps and frames for CPU
-video_frames = pipe(
-    prompt,
-    num_inference_steps=20,  # Reduced for CPU
-    num_frames=8,           # Fewer frames
-    height=128,             # Lower resolution
-    width=128,
-).frames[0]
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install diffusers transformers accelerate pillow numpy requests
 
-# Save video
-video_path = "cpu_generated_video.mp4"
-export_to_video(video_frames, video_path)
-print(f"✅ Video saved: {video_path}")
+    - name: Create video generation script
+      run: |
+        cat > generate_video.py << 'EOF'
+        import torch
+        from diffusers import DiffusionPipeline
+        from diffusers.utils import export_to_video
+        import os
 
-# Display video
-display(Video(video_path, embed=True))
+        print("🚀 Loading text-to-video model on CPU...")
 
-print("🎉 Video generated successfully on CPU!")
+        device = "cpu"
+        torch_dtype = torch.float32
+
+        try:
+            pipe = DiffusionPipeline.from_pretrained(
+                "damo-vilab/text-to-video-ms-1.7b",
+                torch_dtype=torch_dtype,
+            )
+            pipe = pipe.to(device)
+            print("✅ Model loaded successfully on CPU!")
+            
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+            pipe = DiffusionPipeline.from_pretrained("damo-vilab/text-to-video-ms-1.7b")
+            pipe = pipe.to(device)
+
+        # Get prompt from environment variable or use default
+        prompt = os.getenv('PROMPT', 'A cute teddy bear waving hello')
+        print(f"🎬 Generating video: {prompt}")
+
+        video_frames = pipe(
+            prompt,
+            num_inference_steps=20,
+            num_frames=8,
+            height=128,
+            width=128,
+        ).frames[0]
+
+        video_path = "generated_video.mp4"
+        export_to_video(video_frames, video_path)
+        print(f"✅ Video saved: {video_path}")
+        EOF
+
+    - name: Generate video
+      env:
+        PROMPT: ${{ github.event.inputs.prompt || 'A cute teddy bear waving hello' }}
+      run: |
+        python generate_video.py
+
+    - name: Upload generated video
+      uses: actions/upload-artifact@v4
+      with:
+        name: generated-video
+        path: generated_video.mp4
+        retention-days: 7
