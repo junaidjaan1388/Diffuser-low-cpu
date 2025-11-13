@@ -1,0 +1,106 @@
+# .github/workflows/video-generation-complete.yml
+name: Complete Video Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Video description'
+        required: true
+        default: 'A cute teddy bear waving hello'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Cache model weights
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/huggingface/hub
+        key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-huggingface-
+
+    - name: Install all dependencies
+      run: |
+        pip install --upgrade pip
+        # Install PyTorch CPU version
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        # Install diffusers and related
+        pip install diffusers transformers accelerate
+        # Install image/video processing libraries
+        pip install Pillow numpy requests
+        # Install video export dependencies
+        pip install opencv-python imageio imageio-ffmpeg
+        # Optional: for better performance
+        pip install scipy ftfy
+
+    - name: Run video generation
+      env:
+        PROMPT: ${{ github.event.inputs.prompt }}
+      run: |
+        python << 'EOF'
+        import torch
+        from diffusers import DiffusionPipeline
+        from diffusers.utils import export_to_video
+        import os
+        import time
+
+        start_time = time.time()
+        
+        print("🚀 Starting video generation...")
+        prompt = os.getenv('PROMPT', 'A cute teddy bear waving hello')
+        print(f"Prompt: {prompt}")
+
+        # Load model
+        pipe = DiffusionPipeline.from_pretrained(
+            "damo-vilab/text-to-video-ms-1.7b",
+            torch_dtype=torch.float32,
+        )
+        pipe = pipe.to("cpu")
+        print("✅ Model loaded")
+
+        # Generate video
+        print("🎬 Generating frames...")
+        result = pipe(
+            prompt=prompt,
+            num_inference_steps=20,
+            num_frames=8,
+            height=128,
+            width=128,
+        )
+
+        print("💾 Exporting video...")
+        video_path = "output_video.mp4"
+        export_to_video(result.frames[0], video_path)
+        
+        end_time = time.time()
+        print(f"✅ Video generated successfully!")
+        print(f"📊 Output: {video_path}")
+        print(f"⏱️  Total time: {end_time - start_time:.2f} seconds")
+        print(f"🎞️  Frames generated: {len(result.frames[0])}")
+        EOF
+
+    - name: Upload video artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-generated-video
+        path: output_video.mp4
+        retention-days: 7
+
+    - name: Show workflow summary
+      if: always()
+      run: |
+        echo "## Video Generation Complete" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Video successfully generated and saved as artifact" >> $GITHUB_STEP_SUMMARY
+        echo "📁 Download from the Artifacts section" >> $GITHUB_STEP_SUMMARY
