@@ -2,16 +2,12 @@
 name: Text-to-Video Generation
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
     inputs:
       prompt:
         description: 'Text prompt for video generation'
         required: true
         default: 'A cute teddy bear waving hello'
-  push:
-    branches: [ main ]
-  schedule:
-    - cron: '0 0 * * *'  # Daily at midnight
 
 jobs:
   generate-video:
@@ -31,6 +27,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install diffusers transformers accelerate pillow numpy requests
+        pip install opencv-python imageio imageio-ffmpeg  # Added missing dependencies
 
     - name: Create video generation script
       run: |
