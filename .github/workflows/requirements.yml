@@ -44,7 +44,7 @@ jobs:
         result = pipe(
             prompt,
             num_inference_steps=5,
-            num_frames=5,
+            num_frames=50,
             height=400,
             width=400,
         )
