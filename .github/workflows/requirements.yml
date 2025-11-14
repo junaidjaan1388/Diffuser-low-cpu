@@ -5,30 +5,77 @@ on:
   workflow_dispatch:
     inputs:
       prompt:
-        description: 'Text prompt'
+        description: 'Text prompt for video generation'
         required: true
         default: 'A cute teddy bear waving hello'
+      num_frames:
+        description: 'Number of frames (24-100)'
+        required: false
+        default: '24'
+      num_inference_steps:
+        description: 'Number of inference steps (1-50)'
+        required: false
+        default: '25'
+      resolution:
+        description: 'Video resolution'
+        required: false
+        default: '320x240'
+        type: choice
+        options:
+        - '256x256'
+        - '320x240'
+        - '400x400'
+        - '512x512'
 
 jobs:
   generate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
     
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
         
-    - name: Install dependencies from requirements.txt
+    - name: Cache model weights
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/huggingface
+        key: ${{ runner.os }}-huggingface-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-huggingface-
+    
+    - name: Install system dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
         
     - name: Generate video
       env:
         PROMPT: ${{ github.event.inputs.prompt }}
+        NUM_FRAMES: ${{ github.event.inputs.num_frames }}
+        NUM_INFERENCE_STEPS: ${{ github.event.inputs.num_inference_steps }}
+        RESOLUTION: ${{ github.event.inputs.resolution }}
+        HF_HOME: /home/runner/.cache/huggingface
       run: |
+        echo "Generating video with parameters:"
+        echo "Prompt: $PROMPT"
+        echo "Frames: $NUM_FRAMES"
+        echo "Steps: $NUM_INFERENCE_STEPS"
+        echo "Resolution: $RESOLUTION"
+        
+        # Parse resolution
+        IFS='x' read -r WIDTH HEIGHT <<< "$RESOLUTION"
+        
         python -c "
         import torch
         from diffusers import DiffusionPipeline
@@ -36,25 +83,64 @@ jobs:
         import os
         
         prompt = os.getenv('PROMPT', 'A cute teddy bear waving hello')
-        print(f'Generating: {prompt}')
+        num_frames = int(os.getenv('NUM_FRAMES', '24'))
+        num_inference_steps = int(os.getenv('NUM_INFERENCE_STEPS', '25'))
+        width = int(os.getenv('WIDTH', '320'))
+        height = int(os.getenv('HEIGHT', '240'))
         
-        pipe = DiffusionPipeline.from_pretrained('damo-vilab/text-to-video-ms-1.7b')
-        pipe = pipe.to('cpu')
+        print(f'Initializing pipeline...')
         
-        result = pipe(
-            prompt,
-            num_inference_steps=5,
-            num_frames=50,
-            height=400,
-            width=400,
+        # Load pipeline with safety settings
+        pipe = DiffusionPipeline.from_pretrained(
+            'damo-vilab/text-to-video-ms-1.7b',
+            torch_dtype=torch.float16,
+            device_map='auto',
+            use_safetensors=True
         )
         
-        export_to_video(result.frames[0], 'video.mp4')
-        print('Done! Video saved as video.mp4')
+        # Enable memory efficient attention
+        pipe.enable_attention_slicing()
+        pipe.enable_memory_efficient_attention()
+        
+        print(f'Generating: {prompt}')
+        print(f'Configuration: {num_frames} frames, {num_inference_steps} steps, {width}x{height}')
+        
+        # Generate video
+        result = pipe(
+            prompt,
+            num_inference_steps=num_inference_steps,
+            num_frames=num_frames,
+            height=height,
+            width=width,
+            guidance_scale=7.5,
+        )
+        
+        # Export video
+        video_path = 'generated_video.mp4'
+        export_to_video(result.frames[0], video_path, fps=8)
+        print(f'Done! Video saved as {video_path}')
+        
+        # Print file info
+        import subprocess
+        file_size = os.path.getsize(video_path)
+        print(f'Video file size: {file_size / (1024*1024):.2f} MB')
         "
         
-    - name: Upload result
+    - name: Upload video artifact
       uses: actions/upload-artifact@v4
       with:
-        name: generated-video
-        path: video.mp4
+        name: generated-video-${{ github.run_id }}
+        path: generated_video.mp4
+        retention-days: 7
+        
+    - name: Create summary
+      if: always()
+      run: |
+        echo "## Video Generation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Prompt:** ${{ github.event.inputs.prompt }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frames:** ${{ github.event.inputs.num_frames }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Steps:** ${{ github.event.inputs.num_inference_steps }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Resolution:** ${{ github.event.inputs.resolution }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Workflow:** ${{ github.workflow }} #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Download the generated video from the Artifacts section." >> $GITHUB_STEP_SUMMARY
