@@ -43,10 +43,10 @@ jobs:
         
         result = pipe(
             prompt,
-            num_inference_steps=10,
-            num_frames=10,
-            height=128,
-            width=128,
+            num_inference_steps=50,
+            num_frames=50,
+            height=500,
+            width=500,
         )
         
         export_to_video(result.frames[0], 'video.mp4')
