@@ -1,20 +1,12 @@
 from diffusers import DiffusionPipeline
 import torch
-import numpy as np
-from PIL import Image
-import os
 
-# Initialize the pipeline with explicit device mapping
+# Force CPU usage
 pipeline = DiffusionPipeline.from_pretrained(
     "damo-vilab/text-to-video-ms-1.7b",
-    torch_dtype=torch.float16,
-    variant="fp16",
-    device_map="balanced"  # Use "balanced" instead of "auto"
+    torch_dtype=torch.float32,
+    device_map="cpu"  # Explicitly use CPU
 )
-
-# Enable memory efficient attention if needed
-pipeline.enable_model_cpu_offload()
-pipeline.enable_vae_slicing()
 
 # Generation parameters
 prompt = "A cute cat is walking on the moon"
@@ -23,28 +15,15 @@ num_inference_steps = 10
 height = 240
 width = 320
 
-print(f"Generating video: {prompt}")
-print(f"Frames: {num_frames}, Steps: {num_inference_steps}, Resolution: {width}x{height}")
+print("Generating video...")
 
-# Generate the video
-try:
-    video_frames = pipeline(
-        prompt,
-        num_frames=num_frames,
-        num_inference_steps=num_inference_steps,
-        height=height,
-        width=width,
-        generator=torch.Generator("cpu").manual_seed(42)
-    ).frames
-    
-    # Save the video frames
-    os.makedirs("output", exist_ok=True)
-    
-    # Save as individual frames
-    for i, frame in enumerate(video_frames):
-        frame.save(f"output/frame_{i:03d}.png")
-    
-    print(f"Video generation completed! Saved {len(video_frames)} frames to output/ directory")
-    
-except Exception as e:
-    print(f"Error during generation: {e}")
+# Generate
+video_frames = pipeline(
+    prompt,
+    num_frames=num_frames,
+    num_inference_steps=num_inference_steps,
+    height=height,
+    width=width
+).frames
+
+print("Video generated successfully!")
