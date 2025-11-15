@@ -1,0 +1,51 @@
+name: Generate Video with Cache
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Video prompt'
+        required: true
+        default: 'A cute cat is walking on the moon'
+      frames:
+        description: 'Number of frames'
+        required: true
+        default: 24
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Cache model weights
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/huggingface
+        key: ${{ runner.os }}-huggingface-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-huggingface-
+          
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Generate video
+      run: |
+        python generate_video.py
+        
+    - name: Upload results
+      uses: actions/upload-artifact@v4
+      with:
+        name: generated-video
+        path: |
+          output/
+          *.mp4
+        retention-days: 30
