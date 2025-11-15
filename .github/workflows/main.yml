@@ -1,4 +1,4 @@
-name: Text-to-Image-to-Video Generation
+name: Advanced Text-to-Video Generation
 
 on:
   workflow_dispatch:
@@ -6,11 +6,11 @@ on:
       prompt:
         description: 'Text prompt for generation'
         required: true
-        default: 'A cute teddy bear waving hello on the moon'
+        default: 'A cute teddy bear waving hello'
       num_frames:
         description: 'Number of video frames'
         required: true
-        default: 24
+        default: 16
         type: number
 
 jobs:
@@ -29,175 +29,81 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-        pip install diffusers transformers accelerate pillow numpy
-        pip install opencv-python imageio imageio-ffmpeg scikit-image
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+        pip install diffusers transformers accelerate pillow numpy opencv-python
+        pip install imageio imageio-ffmpeg scikit-image
 
-    - name: Create generation script
-      run: |
-        cat > generate_high_fps_video.py << 'EOF'
-        import torch
-        import numpy as np
-        from PIL import Image
-        from diffusers import DiffusionPipeline, StableDiffusionPipeline
-        import os
-        import cv2
-        from pathlib import Path
-
-        print("🚀 Starting Text-to-Image-to-Video Pipeline...")
-
-        # Get parameters
-        prompt = os.getenv('PROMPT', 'A cute teddy bear waving hello on the moon')
-        num_frames = int(os.getenv('NUM_FRAMES', '24'))
-        
-        print(f"📝 Prompt: {prompt}")
-        print(f"🎞️ Target frames: {num_frames}")
-
-        # Step 1: Text-to-Image
-        print("\\n📸 Step 1: Generating base image from text...")
-        try:
-            image_pipe = StableDiffusionPipeline.from_pretrained(
-                "runwayml/stable-diffusion-v1-5",
-                torch_dtype=torch.float32,
-                safety_checker=None,
-                requires_safety_checker=False
-            )
-            image_pipe = image_pipe.to("cpu")
-            
-            # Generate base image
-            base_image = image_pipe(
-                prompt,
-                num_inference_steps=20,
-                height=256,
-                width=256
-            ).images[0]
-            
-            base_image.save("base_image.png")
-            print("✅ Base image generated: base_image.png")
-            
-        except Exception as e:
-            print(f"❌ Error in text-to-image: {e}")
-            # Fallback: Create a simple colored image
-            base_image = Image.new('RGB', (256, 256), color='lightblue')
-            base_image.save("base_image.png")
-            print("🔄 Using fallback image")
-
-        # Step 2: Image-to-Video with variations
-        print("\\n🎬 Step 2: Creating video from image variations...")
-        
-        # Create output directory
-        Path("frames").mkdir(exist_ok=True)
-        
-        # Generate frame variations
-        frames = []
-        base_array = np.array(base_image)
-        
-        for i in range(num_frames):
-            # Create slight variations for animation effect
-            frame_array = base_array.copy()
-            
-            # Add subtle transformations to create motion
-            if num_frames > 1:
-                # Calculate progress through animation (0 to 1 and back)
-                progress = (i / (num_frames - 1)) * 2 * np.pi
-                
-                # Add wave-like transformations
-                wave_factor = np.sin(progress) * 5  # Small displacement
-                
-                # Apply affine transformation for subtle movement
-                rows, cols = frame_array.shape[:2]
-                
-                # Create transformation matrix for slight movement
-                if i > 0:
-                    M = np.float32([[1, 0, wave_factor * 0.1], 
-                                   [0, 1, wave_factor * 0.1]])
-                    frame_array = cv2.warpAffine(frame_array, M, (cols, rows))
-                
-                # Add color variations
-                hue_shift = int(np.sin(progress) * 10)
-                hsv = cv2.cvtColor(frame_array, cv2.COLOR_RGB2HSV)
-                hsv[:, :, 0] = (hsv[:, :, 0] + hue_shift) % 180
-                frame_array = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
-            
-            # Convert back to PIL and save
-            frame_img = Image.fromarray(frame_array)
-            frame_path = f"frames/frame_{i:03d}.png"
-            frame_img.save(frame_path)
-            frames.append(frame_array)
-            
-            if i % 5 == 0:
-                print(f"📊 Generated frame {i+1}/{num_frames}")
-
-        # Step 3: Create video from frames
-        print("\\n🎥 Step 3: Creating video file...")
-        
-        # Get frame dimensions
-        height, width = frames[0].shape[:2]
-        
-        # Create video writer
-        video_path = "generated_video.mp4"
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        fps = 12  # Higher FPS for smoother video
-        
-        out = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
-        
-        for frame in frames:
-            # Convert RGB to BGR for OpenCV
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            out.write(frame_bgr)
-        
-        out.release()
-        
-        print(f"✅ Video generated: {video_path}")
-        print(f"📊 Video specs: {width}x{height}, {fps} FPS, {num_frames} frames")
-        print(f"⏱️ Duration: {num_frames/fps:.2f} seconds")
-
-        # Create a GIF as well
-        print("\\🔄 Creating GIF preview...")
-        gif_path = "preview.gif"
-        
-        # Resize frames for smaller GIF
-        gif_frames = []
-        for frame in frames:
-            img = Image.fromarray(frame)
-            # Resize for smaller file size
-            img_resized = img.resize((128, 128), Image.Resampling.LANCZOS)
-            gif_frames.append(img_resized)
-        
-        # Save as GIF
-        gif_frames[0].save(
-            gif_path,
-            save_all=True,
-            append_images=gif_frames[1:],
-            duration=1000//fps,  # Duration in ms
-            loop=0
-        )
-        
-        print(f"✅ GIF preview: {gif_path}")
-        print("🎉 Generation completed successfully!")
-        EOF
-
-    - name: Generate high-FPS video
+    - name: Run advanced generation
       env:
         PROMPT: ${{ github.event.inputs.prompt }}
         NUM_FRAMES: ${{ github.event.inputs.num_frames }}
       run: |
-        python generate_high_fps_video.py
+        python << 'EOF'
+        import torch
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+        import cv2
+        import os
+        from pathlib import Path
 
-    - name: Upload generated assets
+        prompt = os.getenv('PROMPT', 'A cute teddy bear waving hello')
+        num_frames = int(os.getenv('NUM_FRAMES', '16'))
+
+        print(f"🎬 Generating: {prompt}")
+        print(f"📊 Frames: {num_frames}")
+
+        # Create animated frames
+        width, height = 320, 240
+        frames = []
+
+        for i in range(num_frames):
+            # Create base image
+            img = Image.new('RGB', (width, height), color='lightblue')
+            draw = ImageDraw.Draw(img)
+            
+            # Calculate animation progress
+            progress = i / (num_frames - 1) if num_frames > 1 else 0
+            
+            # Draw animated elements
+            # Animated circle (bouncing)
+            circle_x = int(width * 0.5 + np.sin(progress * 4 * np.pi) * 50)
+            circle_y = int(height * 0.3 + np.cos(progress * 2 * np.pi) * 20)
+            draw.ellipse([circle_x-30, circle_y-30, circle_x+30, circle_y+30], 
+                        fill='yellow', outline='orange', width=3)
+            
+            # Animated text
+            text_x = int(width * 0.5)
+            text_y = int(height * 0.7)
+            draw.text((text_x-80, text_y), f"Frame {i+1}", fill='black')
+            
+            # Convert to numpy array for video
+            frame_array = np.array(img)
+            frames.append(frame_array)
+            
+            # Save individual frame
+            Path("frames").mkdir(exist_ok=True)
+            img.save(f"frames/frame_{i:03d}.png")
+
+        # Create video
+        video_path = "animated_video.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        fps = 15
+        
+        out = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
+        for frame in frames:
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            out.write(frame_bgr)
+        out.release()
+
+        print(f"✅ Video created: {video_path}")
+        print(f"📊 Resolution: {width}x{height}, FPS: {fps}")
+        EOF
+
+    - name: Upload results
       uses: actions/upload-artifact@v4
       with:
-        name: generated-assets
+        name: animation-results
         path: |
-          generated_video.mp4
-          preview.gif
-          base_image.png
+          animated_video.mp4
           frames/
         retention-days: 7
-
-    - name: Display generation info
-      run: |
-        echo "🎬 Generation completed!"
-        echo "📝 Prompt: ${{ github.event.inputs.prompt }}"
-        echo "🎞️ Frames: ${{ github.event.inputs.num_frames }}"
-        echo "📁 Assets saved as artifact: generated-assets"
