@@ -1,0 +1,75 @@
+name: Text-to-Image-to-Video Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Text prompt for generation'
+        required: true
+        default: 'A cute cat walking on the moon with stars'
+      num_frames:
+        description: 'Number of video frames'
+        required: true
+        default: 24
+        type: number
+      video_duration:
+        description: 'Video duration in seconds'
+        required: true
+        default: 3
+        type: number
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+        pip install diffusers transformers accelerate pillow numpy
+        pip install opencv-python imageio imageio-ffmpeg scikit-image
+
+    - name: Run text-to-image-to-video generation
+      env:
+        PROMPT: ${{ github.event.inputs.prompt }}
+        NUM_FRAMES: ${{ github.event.inputs.num_frames }}
+        DURATION: ${{ github.event.inputs.video_duration }}
+      run: |
+        python text_to_video_generator.py
+
+    - name: Upload generated assets
+      uses: actions/upload-artifact@v4
+      with:
+        name: generated-video-assets
+        path: |
+          output/
+        retention-days: 30
+
+    - name: Create download links
+      run: |
+        echo "🎬 Video Generation Completed!"
+        echo "📝 Prompt: ${{ github.event.inputs.prompt }}"
+        echo "🎞️ Frames: ${{ github.event.inputs.num_frames }}"
+        echo "⏱️ Duration: ${{ github.event.inputs.video_duration }}s"
+        echo ""
+        echo "📥 Download your generated files from the Artifacts section above:"
+        echo "   - Click on 'generated-video-assets'"
+        echo "   - Download the ZIP file containing:"
+        echo "     • generated_video.mp4 (main video)"
+        echo "     • preview.gif (animated preview)"
+        echo "     • base_image.png (source image)"
+        echo "     • frames/ (individual frames folder)"
