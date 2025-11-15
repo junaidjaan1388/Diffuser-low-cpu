@@ -1,9 +1,7 @@
 name: Generate Video
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
 
 jobs:
@@ -24,8 +22,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
         pip install diffusers transformers accelerate pillow
+        pip install imageio imageio-ffmpeg
         
-    - name: Run video generation script
+    - name: Run video generation
       run: |
         python generate_video.py
         
@@ -34,4 +33,3 @@ jobs:
       with:
         name: video-frames
         path: output/
-        retention-days: 7
