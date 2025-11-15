@@ -75,9 +75,9 @@ jobs:
         result = pipe(
             prompt=prompt,
             num_inference_steps=20,
-            num_frames=8,
-            height=128,
-            width=128,
+            num_frames=80,
+            height=300,
+            width=300,
         )
 
         print("💾 Exporting video...")
