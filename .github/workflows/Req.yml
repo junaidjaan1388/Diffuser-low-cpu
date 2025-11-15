@@ -1,0 +1,49 @@
+name: Generate Video with Inputs
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Video prompt'
+        required: true
+        default: 'A cute cat is walking on the moon'
+      frames:
+        description: 'Number of frames'
+        required: true
+        default: 24
+        type: number
+      steps:
+        description: 'Inference steps'
+        required: true
+        default: 10
+        type: number
+
+jobs:
+  generate-video:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Generate video with parameters
+      env:
+        PROMPT: ${{ github.event.inputs.prompt }}
+        FRAMES: ${{ github.event.inputs.frames }}
+        STEPS: ${{ github.event.inputs.steps }}
+      run: |
+        python generate_video_with_params.py
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: video-results-${{ github.run_id }}
+        path: output/
