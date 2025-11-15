@@ -13,8 +13,8 @@ pipeline = DiffusionPipeline.from_pretrained(
 
 # Generation parameters
 prompt = "A cute cat is walking on the moon"
-num_frames = 24
-num_inference_steps = 10
+num_frames = 300
+num_inference_steps = 3
 height = 240
 width = 320
 
